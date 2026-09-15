@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#059669" />
+    <meta name="description" content="Application de gestion de cantine scolaire - Fonctionne hors ligne (Offline-First)" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Cantine Scolaire — Gestion Quotidienne</title>
+  </head>
+  <body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen">
+    <!-- Message convivial si ouverture directe en double-clic (file://) -->
+    <div id="file-protocol-warning" style="display:none; font-family: system-ui, -apple-system, sans-serif; padding: 32px; text-align: center; max-width: 620px; margin: 50px auto; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+      <div style="width: 56px; height: 56px; background: #ecfdf5; border-radius: 16px; margin: 0 auto 16px auto; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+        🍽️
+      </div>
+      <h2 style="color: #0f172a; font-size: 22px; font-weight: 800; margin: 0 0 10px 0;">Application Cantine Scolaire</h2>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
+        Vous avez ouvert ce fichier directement par double-clic (protocole <code>file://</code>).<br>
+        Pour des raisons de sécurité, les navigateurs modernes bloquent l'exécution de l'application en mode fichier direct.
+      </p>
+      
+      <div style="background: #f0fdf4; border: 2px dashed #86efac; border-radius: 14px; padding: 20px; margin-bottom: 20px;">
+        <p style="font-weight: 800; color: #166534; margin: 0 0 6px 0; font-size: 15px;">
+          👉 Pour lancer l'application facilement :
+        </p>
+        <p style="color: #14532d; font-size: 14px; margin: 0;">
+          Dans le dossier, double-cliquez simplement sur le fichier :<br>
+          <strong style="color: #059669; font-size: 18px; display: inline-block; margin-top: 6px;">LANCER_L_APPLICATION.bat</strong>
+        </p>
+      </div>
+
+      <p style="color: #64748b; font-size: 13px; margin: 0;">
+        Si le serveur est déjà lancé, ouvrez simplement :<br>
+        <a href="http://localhost:3000" target="_blank" style="color: #059669; font-weight: 700; text-decoration: underline; font-size: 15px;">http://localhost:3000</a>
+      </p>
+    </div>
+
+    <script>
+      if (window.location.protocol === 'file:') {
+        document.getElementById('file-protocol-warning').style.display = 'block';
+      }
+    </script>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
