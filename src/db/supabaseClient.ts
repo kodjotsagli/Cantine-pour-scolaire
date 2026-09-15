@@ -2,16 +2,19 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let supabaseInstance: SupabaseClient | null = null;
 
-export function getSupabaseConfig(): { url: string; key: string } {
-  const localUrl = localStorage.getItem('cantine_supabase_url') || '';
-  const localKey = localStorage.getItem('cantine_supabase_anon_key') || '';
+const DEFAULT_SUPABASE_URL = 'https://nydkiudywfdugalbvamy.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_56WO58Fy31pwGrGeEhegmA_zY-58LCM';
 
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+export function getSupabaseConfig(): { url: string; key: string } {
+  const localUrl = localStorage.getItem('cantine_supabase_url');
+  const localKey = localStorage.getItem('cantine_supabase_anon_key');
+
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
   return {
-    url: localUrl || envUrl,
-    key: localKey || envKey
+    url: (localUrl && localUrl.trim()) || envUrl || DEFAULT_SUPABASE_URL,
+    key: (localKey && localKey.trim()) || envKey || DEFAULT_SUPABASE_ANON_KEY
   };
 }
 
