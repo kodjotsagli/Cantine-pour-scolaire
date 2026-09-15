@@ -2,7 +2,7 @@ import React, { useState, useEffect, createContext, useContext, ReactNode } from
 import type { UserRole } from '../types';
 import { getSupabaseClient, isSupabaseConfigured } from '../db/supabaseClient';
 import { db } from '../db';
-import { pullFromSupabase } from '../services/syncService';
+import { pullFromSupabase, resetRealtimeSync } from '../services/syncService';
 
 interface AuthContextType {
   role: UserRole;
@@ -210,8 +210,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const sId = data.user.user_metadata?.school_id || localStorage.getItem('cantine_school_id');
         if (sId) {
+          // Clear old local data and pull this school's data fresh
+          await db.students.clear();
+          await db.meals.clear();
+          await db.deposits.clear();
+          await db.classes.clear();
           await pullFromSupabase(sId, true);
         }
+
+        resetRealtimeSync();
+        window.dispatchEvent(new Event('school-changed'));
+        window.dispatchEvent(new Event('sync-queue-updated'));
 
         return { success: true };
       }
@@ -237,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const generatedSchoolId = `sch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       
-      // 1. Create School
+      // 1. Create School in Supabase
       const { error: schoolError } = await client.from('schools').insert({
         id: generatedSchoolId,
         name: params.schoolName.trim(),
@@ -265,28 +274,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await client.from('classes').insert(defaultClassesForSchool);
 
-      // 3. Register Admin User
-      const { data: authData, error: authError } = await client.auth.signUp({
-        email: params.email.trim(),
-        password: params.pass,
-        options: {
+      // 3. Register or Link Admin User
+      let userId: string | null = null;
+      const cleanEmail = params.email.trim();
+
+      // Check if current user is already signed in with this email
+      const { data: sessionData } = await client.auth.getSession();
+      const currentSessionUser = sessionData?.session?.user;
+
+      if (currentSessionUser && currentSessionUser.email?.toLowerCase() === cleanEmail.toLowerCase()) {
+        userId = currentSessionUser.id;
+        await client.auth.updateUser({
           data: {
             full_name: params.fullName.trim(),
             role: 'admin',
             school_id: generatedSchoolId,
             school_name: params.schoolName.trim()
           }
-        }
-      });
+        });
+      } else {
+        // Try sign up
+        const { data: authData, error: authError } = await client.auth.signUp({
+          email: cleanEmail,
+          password: params.pass,
+          options: {
+            data: {
+              full_name: params.fullName.trim(),
+              role: 'admin',
+              school_id: generatedSchoolId,
+              school_name: params.schoolName.trim()
+            }
+          }
+        });
 
-      if (authError) {
-        return { success: false, error: authError.message };
+        if (authError) {
+          const isAlreadyRegistered =
+            authError.message.toLowerCase().includes('already registered') ||
+            authError.message.toLowerCase().includes('already exists') ||
+            authError.message.toLowerCase().includes('unique');
+
+          if (isAlreadyRegistered) {
+            // User already registered in Supabase auth; try logging in with password
+            const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+              email: cleanEmail,
+              password: params.pass
+            });
+
+            if (signInError) {
+              return {
+                success: false,
+                error: `Ce compte email existe déjà avec un mot de passe différent. Veuillez entrer votre mot de passe habituel ou utiliser une autre adresse email.`
+              };
+            }
+
+            if (signInData.user) {
+              userId = signInData.user.id;
+              await client.auth.updateUser({
+                data: {
+                  full_name: params.fullName.trim(),
+                  role: 'admin',
+                  school_id: generatedSchoolId,
+                  school_name: params.schoolName.trim()
+                }
+              });
+            }
+          } else {
+            return { success: false, error: authError.message };
+          }
+        } else if (authData.user) {
+          userId = authData.user.id;
+        }
       }
 
-      // 4. Create Profile
-      if (authData.user) {
+      // 4. Create or Update Profile in Supabase
+      if (userId) {
         await client.from('profiles').upsert({
-          id: authData.user.id,
+          id: userId,
           school_id: generatedSchoolId,
           full_name: params.fullName.trim(),
           role: 'admin'
@@ -298,14 +361,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSchoolNameState(params.schoolName.trim());
       setRole('admin');
       setUserDisplayName(params.fullName.trim());
-      setUserEmail(params.email.trim());
+      setUserEmail(cleanEmail);
       localStorage.setItem('cantine_school_id', generatedSchoolId);
       localStorage.setItem('cantine_school_name', params.schoolName.trim());
+      localStorage.setItem('cantine_role', 'admin');
+      localStorage.setItem('cantine_user_name', params.fullName.trim());
+      localStorage.setItem('cantine_user_email', cleanEmail);
+      localStorage.setItem(`cantine_last_synced_${generatedSchoolId}`, new Date().toISOString());
 
       // 6. Reset local store and set initial school classes
       await db.students.clear();
       await db.meals.clear();
       await db.deposits.clear();
+      await db.syncQueue.clear();
       await db.classes.clear();
       await db.classes.bulkAdd(defaultClassesForSchool.map(c => ({
         ...c,
@@ -319,9 +387,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           school_id: generatedSchoolId,
           school_name: params.schoolName.trim(),
           address: params.address?.trim() || '',
-          phone: params.phone?.trim() || ''
+          phone: params.phone?.trim() || '',
+          meal_price: 400,
+          currency: 'FCFA'
+        });
+      } else {
+        await db.settings.add({
+          school_id: generatedSchoolId,
+          school_name: params.schoolName.trim(),
+          address: params.address?.trim() || '',
+          phone: params.phone?.trim() || '',
+          meal_price: 400,
+          currency: 'FCFA',
+          opening_days: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'],
+          timezone: 'Africa/Lome'
         });
       }
+
+      // 7. Reconnect Realtime to new school channel
+      resetRealtimeSync();
+
+      // 8. Notify all components
+      window.dispatchEvent(new Event('school-changed'));
+      window.dispatchEvent(new Event('sync-queue-updated'));
 
       return { success: true };
     } catch (err: any) {
@@ -343,8 +431,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      let userId: string | null = null;
+      const cleanEmail = params.email.trim();
+
       const { data: authData, error: authError } = await client.auth.signUp({
-        email: params.email.trim(),
+        email: cleanEmail,
         password: params.pass,
         options: {
           data: {
@@ -357,12 +448,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (authError) {
-        return { success: false, error: authError.message };
+        const isAlreadyRegistered =
+          authError.message.toLowerCase().includes('already registered') ||
+          authError.message.toLowerCase().includes('already exists') ||
+          authError.message.toLowerCase().includes('unique');
+
+        if (isAlreadyRegistered) {
+          const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+            email: cleanEmail,
+            password: params.pass
+          });
+
+          if (signInError) {
+            return {
+              success: false,
+              error: `Ce compte email existe déjà avec un mot de passe différent. Veuillez saisir votre mot de passe habituel.`
+            };
+          }
+
+          if (signInData.user) {
+            userId = signInData.user.id;
+            await client.auth.updateUser({
+              data: {
+                full_name: params.fullName.trim(),
+                role: params.role,
+                school_id: params.schoolId,
+                school_name: params.schoolName
+              }
+            });
+          }
+        } else {
+          return { success: false, error: authError.message };
+        }
+      } else if (authData.user) {
+        userId = authData.user.id;
       }
 
-      if (authData.user) {
+      if (userId) {
         await client.from('profiles').upsert({
-          id: authData.user.id,
+          id: userId,
           school_id: params.schoolId,
           full_name: params.fullName.trim(),
           role: params.role
@@ -373,9 +497,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSchoolNameState(params.schoolName);
       setRole(params.role);
       setUserDisplayName(params.fullName.trim());
-      setUserEmail(params.email.trim());
+      setUserEmail(cleanEmail);
       localStorage.setItem('cantine_school_id', params.schoolId);
       localStorage.setItem('cantine_school_name', params.schoolName);
+      localStorage.setItem('cantine_role', params.role);
+      localStorage.setItem('cantine_user_name', params.fullName.trim());
+      localStorage.setItem('cantine_user_email', cleanEmail);
+      localStorage.setItem(`cantine_last_synced_${params.schoolId}`, new Date().toISOString());
 
       const currentSettings = await db.settings.toCollection().first();
       if (currentSettings) {
@@ -391,6 +519,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await db.deposits.clear();
       await db.classes.clear();
       await pullFromSupabase(params.schoolId, true);
+
+      resetRealtimeSync();
+      window.dispatchEvent(new Event('school-changed'));
+      window.dispatchEvent(new Event('sync-queue-updated'));
 
       return { success: true };
     } catch (err: any) {

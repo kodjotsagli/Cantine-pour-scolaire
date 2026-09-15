@@ -11,9 +11,15 @@ interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigateToSettings?: () => void;
+  onSuccessNavigateToDashboard?: () => void;
 }
 
-export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onNavigateToSettings }) => {
+export const LoginModal: React.FC<LoginModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onNavigateToSettings,
+  onSuccessNavigateToDashboard 
+}) => {
   const { signInWithEmail, signUpWithNewSchool, signUpWithExistingSchool, fetchSchoolsList } = useAuth();
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [signupMode, setSignupMode] = useState<'new_school' | 'join_school'>('new_school');
@@ -67,7 +73,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onNavig
       setTimeout(() => {
         onClose();
         setSuccess('');
-      }, 1000);
+        if (onSuccessNavigateToDashboard) {
+          onSuccessNavigateToDashboard();
+        }
+      }, 800);
     } else {
       setError(res.error || 'Identifiants incorrects.');
     }
@@ -125,13 +134,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onNavig
     if (res.success) {
       setSuccess(
         signupMode === 'new_school'
-          ? 'École créée avec succès ! Vous êtes connecté comme Directeur.'
+          ? `Établissement « ${schoolNameInput.trim()} » créé avec succès ! Ouverture du tableau de bord...`
           : 'Compte créé avec succès ! Bienvenue dans votre école.'
       );
       setTimeout(() => {
         onClose();
         setSuccess('');
-      }, 1400);
+        if (onSuccessNavigateToDashboard) {
+          onSuccessNavigateToDashboard();
+        }
+      }, 900);
     } else {
       setError(res.error || 'Erreur lors de la création du compte.');
     }

@@ -8,8 +8,10 @@ import {
   PlusCircle, 
   CheckCircle2, 
   ArrowRight,
-  TrendingUp,
-  Clock
+  TrendingUp, 
+  Clock,
+  Sparkles,
+  School
 } from 'lucide-react';
 import { StatCard } from '../components/dashboard/StatCard';
 import { Button } from '../components/ui/Button';
@@ -19,6 +21,7 @@ import { formatFCFA } from '../utils/currency';
 import { getTodayDateString, formatDateLong, formatDateTimeFrench } from '../utils/dates';
 import { getFinancialSummary, FinancialSummary } from '../services/reportService';
 import { db } from '../db';
+import { useAuth } from '../hooks/useAuth';
 import type { Meal, Deposit, Student } from '../types';
 import type { NavItem } from '../components/layout/Sidebar';
 
@@ -33,8 +36,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onOpenNewStudentModal,
   onOpenDepositModal
 }) => {
+  const { schoolName } = useAuth();
   const today = getTodayDateString();
   const [stats, setStats] = useState<FinancialSummary | null>(null);
+  const [totalStudentsCount, setTotalStudentsCount] = useState<number>(0);
   const [recentMeals, setRecentMeals] = useState<(Meal & { studentName?: string })[]>([]);
   const [recentDeposits, setRecentDeposits] = useState<(Deposit & { studentName?: string })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +48,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     try {
       const summary = await getFinancialSummary(today, today);
       setStats(summary);
+
+      const count = await db.students.count();
+      setTotalStudentsCount(count);
 
       // Recent 5 meals today
       const meals = await db.meals
@@ -77,9 +85,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   useEffect(() => {
     loadData();
-    // Listen to changes
+    // Listen to sync and school switch changes
     window.addEventListener('sync-queue-updated', loadData);
-    return () => window.removeEventListener('sync-queue-updated', loadData);
+    window.addEventListener('school-changed', loadData);
+    return () => {
+      window.removeEventListener('sync-queue-updated', loadData);
+      window.removeEventListener('school-changed', loadData);
+    };
   }, [today]);
 
   return (
@@ -88,10 +100,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-emerald-800 to-teal-900 rounded-3xl p-6 text-white shadow-xl shadow-emerald-950/20">
         <div>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-emerald-200 text-xs font-semibold backdrop-blur-md mb-2">
-            <TrendingUp className="w-3.5 h-3.5" /> Cantine en temps réel
+            <School className="w-3.5 h-3.5 text-emerald-300" /> Cantine en direct • {schoolName || 'Établissement'}
           </span>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Tableau de Bord Cantine
+            Tableau de Bord — {schoolName || 'Cantine Scolaire'}
           </h2>
           <p className="text-emerald-100 text-sm mt-1 capitalize">
             {formatDateLong(today)}
@@ -126,6 +138,44 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* New School Welcome Banner if 0 students */}
+      {totalStudentsCount === 0 && !loading && (
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-5 shadow-sm">
+          <div className="space-y-1.5 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Nouveau
+              </span>
+              <h3 className="font-bold text-emerald-950 text-base sm:text-lg flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                Bienvenue dans l'espace de gestion de « {schoolName} » !
+              </h3>
+            </div>
+            <p className="text-emerald-800 text-sm max-w-2xl">
+              Votre établissement est prêt avec ses 8 classes officielles (Section 1 à CM2). Pour lancer le service de cantine, commencez dès maintenant à inscrire vos élèves.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2.5 justify-center shrink-0">
+            <Button
+              variant="primary"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-700/20"
+              icon={<PlusCircle className="w-4 h-4" />}
+              onClick={onOpenNewStudentModal}
+            >
+              Inscrire le 1er Élève
+            </Button>
+            <Button
+              variant="outline"
+              className="bg-white border-emerald-200 text-emerald-800 hover:bg-emerald-100 font-semibold"
+              icon={<ArrowRight className="w-4 h-4" />}
+              onClick={() => onNavigate('classes')}
+            >
+              Voir les Classes (8)
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">

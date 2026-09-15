@@ -75,6 +75,12 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
   useEffect(() => {
     loadClasses();
+    window.addEventListener('sync-queue-updated', loadClasses);
+    window.addEventListener('school-changed', loadClasses);
+    return () => {
+      window.removeEventListener('sync-queue-updated', loadClasses);
+      window.removeEventListener('school-changed', loadClasses);
+    };
   }, [selectedClass]);
 
   const handleOpenClassStudents = async (cls: ClassRoom) => {

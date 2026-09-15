@@ -167,6 +167,12 @@ export function AppContent() {
           setIsLoginModalOpen(false);
           setCurrentTab('settings');
         }}
+        onSuccessNavigateToDashboard={() => {
+          setSelectedStudentId(null);
+          setCurrentTab('dashboard');
+          window.dispatchEvent(new Event('school-changed'));
+          window.dispatchEvent(new Event('sync-queue-updated'));
+        }}
       />
     </div>
   );

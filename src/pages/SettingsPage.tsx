@@ -56,20 +56,29 @@ export const SettingsPage: React.FC = () => {
   const { userEmail, userName, signOutUser, setIsLoginModalOpen } = useAuth();
 
   useEffect(() => {
-    db.settings.toCollection().first().then((s) => {
-      if (s) {
-        setSettings(s);
-        setSchoolName(s.school_name);
-        setAddress(s.address);
-        setPhone(s.phone);
-        setMealPrice(s.meal_price);
-        setCurrency(s.currency);
-      }
-    });
+    const reloadSettings = () => {
+      db.settings.toCollection().first().then((s) => {
+        if (s) {
+          setSettings(s);
+          setSchoolName(s.school_name);
+          setAddress(s.address);
+          setPhone(s.phone);
+          setMealPrice(s.meal_price);
+          setCurrency(s.currency);
+        }
+      });
+    };
+
+    reloadSettings();
+    window.addEventListener('school-changed', reloadSettings);
 
     const conf = getSupabaseConfig();
     setSupabaseUrlState(conf.url);
     setSupabaseKeyState(conf.key);
+
+    return () => {
+      window.removeEventListener('school-changed', reloadSettings);
+    };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {

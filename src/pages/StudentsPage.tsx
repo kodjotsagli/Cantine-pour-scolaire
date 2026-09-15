@@ -48,6 +48,12 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
 
   useEffect(() => {
     loadData();
+    window.addEventListener('sync-queue-updated', loadData);
+    window.addEventListener('school-changed', loadData);
+    return () => {
+      window.removeEventListener('sync-queue-updated', loadData);
+      window.removeEventListener('school-changed', loadData);
+    };
   }, []);
 
   const classMap = new Map(classes.map(c => [c.id, c.name]));

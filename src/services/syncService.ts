@@ -244,3 +244,19 @@ export function initRealtimeSync(): () => void {
     return () => {};
   }
 }
+
+/**
+ * Resets and reconnects the realtime subscription to the newly active school
+ */
+export function resetRealtimeSync(): void {
+  const client = getSupabaseClient();
+  if (client && realtimeSubscription) {
+    try {
+      client.removeChannel(realtimeSubscription);
+    } catch {
+      // ignore
+    }
+    realtimeSubscription = null;
+  }
+  initRealtimeSync();
+}
